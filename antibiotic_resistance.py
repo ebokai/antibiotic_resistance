@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 import collections
 
 class Bacterium(object):
-	def __init__(self, x, y, MIC, n_mutations = 0):
+	def __init__(self, i, j, MIC, n_mutations = 0):
 
 		# location on lattice
-		self.x = x
-		self.y = y
-
+		self.i = i
+		self.j = j
+		
 		# minimum inhibitory concentration
 		self.MIC = MIC 
 
@@ -16,51 +16,56 @@ class Bacterium(object):
 		self.n_mutations = n_mutations
 	
 
-
 def reproduce(bacteria, pairs):
 
-	for b in bacteria:
-		
-		current_MIC = b.MIC
+	if len(bacteria) > 500:
+		sample = np.random.choice(np.arange(len(bacteria)), 500, replace = False)
+	else:
+		sample = np.arange(len(bacteria))
+
+	for i in sample:
+
+		b = bacteria[i]
 
 		if np.random.random() < rep_rate:
-
-			newx1 = (b.x + np.random.randint(0,2)) % simsize
-			newy1 = (b.y + np.random.randint(-1,2)) % simsize
-
-			p1 = (newx1,newy1)
-
-			mutroll = np.random.uniform(0,1)
-
-			if mutroll < p_mut:
-				new_MIC = current_MIC * 10
-				new_nmut = b.n_mutations + 1
-
-			else:
-				new_MIC = current_MIC
-				new_nmut = b.n_mutations
-
+			new_i = (b.i + np.random.randint(-1,2)) % simsize
+			new_j = (b.j + np.random.randint(0,2)) % simsize
+			p1 = (new_i, new_j)
 			if p1 not in pairs:
-				bacteria.append(Bacterium(newx1,newy1,new_MIC,new_nmut))
-				pairs.append((newx1,newy1))
-				
+				if np.random.random() < p_mut:
+					new_MIC = b.MIC * 10 
+					new_n_mutations = b.n_mutations + 1
+				else:
+					new_MIC = b.MIC 
+					new_n_mutations = b.n_mutations
+				bacteria.append(Bacterium(new_i, new_j, new_MIC, new_n_mutations))
+				pairs.append(p1)	
 	return bacteria, pairs
 
 def kill(bacteria, pairs, antibiotic_matrix):
-
 	for b in bacteria:
-		x = b.x
-		y = b.y 
-		MIC = b.MIC
-		nmut = b.n_mutations
-
-		if MIC < antibiotic_matrix[y,x]:
-
+		if b.MIC < antibiotic_matrix[b.i,b.j]:
 			bacteria.remove(b)
-			pairs.remove((x,y))
-			
+			pairs.remove((b.i,b.j))		
 	return bacteria,pairs
 
+
+def initialize_ab_matrix(regions = 10):
+	antibiotic_matrix = np.zeros((simsize, simsize))
+	x = np.arange(simsize)
+	for i in range(simsize):
+		antibiotic_matrix[i,:] = ab0 * np.exp((x-10)/10)
+	return antibiotic_matrix
+
+def initialize_bacteria(n):
+	pairs, bacteria = [], []
+	for _ in range(n):
+		i = np.random.randint(0, simsize)
+		pair = (i,0)
+		if pair not in pairs:
+			pairs.append(pair)
+			bacteria.append(Bacterium(i, 0, 1))
+	return pairs, bacteria
 
 
 
@@ -77,37 +82,24 @@ pairs     = []
 avmutlist = []
 tlist     = []
 
-# initialize ab matrix 
-for x in range(simsize):
-	for y in range(simsize):
-		antibiotic_matrix[x,y] = ab0 * 10**((y//30)-1)
+antibiotic_matrix = initialize_ab_matrix()
+pairs, bacteria = initialize_bacteria(50)
 
-
-# initialize bacteria
-for b in range(simsize):
-	x = 0
-	y = np.random.randint(0,simsize-1)
-
-	pair = (x,y)
-
-	if pair not in pairs:
-		pairs.append(pair)
-		bacteria.append(Bacterium(x, y, 0.5))
 			
-for t in range(500):
-	bacteria,pairs = reproduce(bacteria,pairs)
-	bacteria,pairs = kill(bacteria,pairs,antibiotic_matrix)
+for t in range(2500):
+	bacteria, pairs = reproduce(bacteria, pairs)
+	bacteria, pairs = kill(bacteria, pairs, antibiotic_matrix)
 	print('time: %d, number of bacteria: %d' % (t,len(bacteria)))
 
-bactinfo = [(b.x,b.y,b.n_mutations) for b in bacteria]
+bactinfo = [(b.i, b.j, b.n_mutations) for b in bacteria]
 bandlist = []
 
 for band in range(5):
 	bsum = 0
 	bandlist.append([])
-	for x in range(band*30,(band+1)*30):
+	for j in range(band*30,(band+1)*30):
 		for bact in bactinfo:
-			if bact[0] == x:
+			if bact[0] == j:
 				bsum += 1
 				bandlist[band].append(bact[2])
 
@@ -120,7 +112,7 @@ for band in bandlist:
 
 plt.matshow(np.log10(antibiotic_matrix),fignum=0,cmap='gray_r')
 plt.colorbar(label='antibiotic concentration [log mg/L]')
-plt.scatter([b.x for b in bacteria],[b.y for b in bacteria],
+plt.scatter([b.j for b in bacteria],[b.i for b in bacteria],
 	c=[b.n_mutations for b in bacteria], cmap='autumn', edgecolor='None', s = 10)
 plt.colorbar(label = 'number of mutations')
 plt.show()
